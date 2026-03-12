@@ -3,6 +3,7 @@ package controllers
 import (
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -153,14 +154,12 @@ func GetAgentTasks(c *gin.Context) {
 			taskType = "DELETE_USER"
 		}
 		
-		// Typically we'll get the Username from the User relation. Let's lookup User.
 		var user models.User
 		db.DB.First(&user, t.UserID)
-		username := ""
-		if user.Email != "" {
-			// Basic email to username parser or a dedicated DB field. Let's assume a basic split.
-			username = user.Email // Would need to strip @domain in a real system.
-		}
+		
+		// Sanitize Username: Linux useradd is strict. 
+		// We use the email prefix and replace dots/special chars.
+		username := sanitizeUsername(user.Email)
 
 		response = append(response, TaskResponse{
 			TaskID:    t.ID.String(),
@@ -173,6 +172,29 @@ func GetAgentTasks(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+func sanitizeUsername(email string) string {
+	// 1. Get prefix (before @)
+	prefix := strings.Split(email, "@")[0]
+	
+	// 2. Replace non-alphanumeric (like dots) with underscores
+	// Linux useradd usually allows: [a-z_][a-z0-9_-]*
+	res := ""
+	for _, r := range prefix {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			res += string(r)
+		} else {
+			res += "_"
+		}
+	}
+	
+	// Ensure it doesn't start with a number or underscore (standard best practice)
+	if len(res) > 0 && (res[0] >= '0' && res[0] <= '9') {
+		res = "u_" + res
+	}
+	
+	return strings.ToLower(res)
 }
 
 type TaskCompleteRequest struct {
@@ -207,6 +229,8 @@ func CompleteAgentTask(c *gin.Context) {
 		task.Status = "active"
 	} else if req.Status == "deleted" {
 		task.Status = "completed" // Full lifecycle done
+	} else if req.Status == "failed" {
+		task.Status = "failed"
 	}
 
 	db.DB.Save(&task)

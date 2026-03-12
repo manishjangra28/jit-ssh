@@ -89,7 +89,12 @@ func LoadConfig(path string) *AgentConfig {
 
 			switch key {
 			case "control_plane_url":
-				cfg.ControlPlaneURL = val
+				// Sanitize the URL: remove trailing slashes
+				u := strings.TrimRight(val, "/")
+				// If the user provided the base URL without /api/v1, we'll keep it as is
+				// but many users might append it twice if they aren't careful.
+				// However, our code appends path segments, so we just need a clean base.
+				cfg.ControlPlaneURL = u
 			case "agent_id":
 				cfg.AgentID = val
 			case "agent_token":

@@ -182,6 +182,7 @@ func (a *Agent) handleTask(task Task) {
 
 	if err != nil {
 		log.Printf("[task] %s failed: %v", task.TaskID, err)
+		a.reportTaskComplete(task.TaskID, "failed")
 		return
 	}
 

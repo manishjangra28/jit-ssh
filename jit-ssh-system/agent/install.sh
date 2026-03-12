@@ -55,6 +55,20 @@ if [ -z "$CONTROL_PLANE_URL" ]; then
   exit 1
 fi
 
+# Sanitize: remove trailing slash
+CONTROL_PLANE_URL="${CONTROL_PLANE_URL%/}"
+
+if [ -z "$AGENT_TOKEN" ]; then
+  echo "WARNING: No agent_token provided. The agent will likely fail to register with a 401 error"
+  echo "         unless your control plane is configured to allow unauthenticated registrations."
+  echo "         You can generate a token in the 'Agent Tokens' section of the Admin Dashboard."
+  echo ""
+  read -p "Continue without a token? (y/N): " CONTINUE_TOKEN
+  if [[ ! "$CONTINUE_TOKEN" =~ ^[Yy]$ ]]; then
+    exit 1
+  fi
+fi
+
 echo ""
 echo "=== JIT SSH Agent Installer ==="
 echo "  Control Plane : $CONTROL_PLANE_URL"
@@ -67,17 +81,26 @@ echo ""
 # ------- Create directories -------
 mkdir -p "$CONFIG_DIR" "$INSTALL_DIR"
 
-# ------- Write config file -------
-if [ -f "$CONFIG_FILE" ]; then
-  echo "[info] Config already exists at $CONFIG_FILE — preserving existing agent_id."
-  # Only update the control_plane_url if it changed
-  sed -i "s|^control_plane_url.*|control_plane_url = $CONTROL_PLANE_URL|" "$CONFIG_FILE"
-  if [ -n "$AGENT_TOKEN" ]; then
-    sed -i "s|^agent_token.*|agent_token = $AGENT_TOKEN|" "$CONFIG_FILE"
+# Function to add or update a config key
+set_config_value() {
+  local key=$1
+  local value=$2
+  if grep -q "^$key" "$CONFIG_FILE"; then
+    # Use | as delimiter to handle URLs with /
+    sed -i "s|^$key.*|$key = $value|" "$CONFIG_FILE"
+  else
+    echo "$key = $value" >> "$CONFIG_FILE"
   fi
-  sed -i "s|^tags.*|tags = $TAGS|" "$CONFIG_FILE"
-  sed -i "s|^heartbeat_interval_sec.*|heartbeat_interval_sec = $HEARTBEAT_INTERVAL|" "$CONFIG_FILE"
-  sed -i "s|^poll_interval_sec.*|poll_interval_sec = $POLL_INTERVAL|" "$CONFIG_FILE"
+}
+
+# ------- Write or Update config file -------
+if [ -f "$CONFIG_FILE" ]; then
+  echo "[info] Updating existing config at $CONFIG_FILE"
+  set_config_value "control_plane_url" "$CONTROL_PLANE_URL"
+  [ -n "$AGENT_TOKEN" ] && set_config_value "agent_token" "$AGENT_TOKEN"
+  set_config_value "tags" "$TAGS"
+  set_config_value "heartbeat_interval_sec" "$HEARTBEAT_INTERVAL"
+  set_config_value "poll_interval_sec" "$POLL_INTERVAL"
 else
   cat > "$CONFIG_FILE" <<EOF
 # JIT SSH Agent Configuration

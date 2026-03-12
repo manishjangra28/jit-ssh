@@ -5,6 +5,7 @@ import { ShieldCheck, Calendar, Activity, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { getApiUrl } from "@/lib/api";
 
 export default function AuditLogsPage() {
   const [logs, setLogs] = useState<any[]>([]);
@@ -13,7 +14,7 @@ export default function AuditLogsPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'}/logs`);
+      const res = await fetch(`${getApiUrl()}/logs`);
       if (res.ok) setLogs(await res.json());
     } catch (e) {
       console.error(e);

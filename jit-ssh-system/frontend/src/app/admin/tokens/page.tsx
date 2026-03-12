@@ -5,6 +5,7 @@ import { Plus, Trash2, KeyRound, Copy, Check, ShieldAlert, Clock, Info } from "l
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { getApiUrl } from "@/lib/api";
 
 interface AgentToken {
   id: string;
@@ -22,14 +23,6 @@ export default function AgentTokensPage() {
   const [submitting, setSubmitting] = useState(false);
   const [revealedToken, setRevealedToken] = useState<{ label: string; token: string } | null>(null);
   const [copied, setCopied] = useState(false);
-
-  const getApiUrl = () => {
-    if (typeof window !== "undefined" && window.location.hostname !== "localhost") {
-       // If running in docker/production, we might need a dynamic URL
-       // but for now let's stick to the env or default
-    }
-    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
-  };
 
   const fetchTokens = async () => {
     try {
@@ -56,7 +49,7 @@ export default function AgentTokensPage() {
     
     try {
       setSubmitting(true);
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'}/agent-tokens`, {
+      const res = await fetch(`${getApiUrl()}/agent-tokens`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ label: newTokenLabel })
@@ -80,7 +73,7 @@ export default function AgentTokensPage() {
     if (!confirm("Are you sure you want to revoke this token? Any agent using it will lose access immediately.")) return;
     
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'}/agent-tokens/${id}`, {
+      const res = await fetch(`${getApiUrl()}/agent-tokens/${id}`, {
         method: "DELETE"
       });
       if (res.ok) {

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Key, Save, Check, Eye, EyeOff, Lock, ShieldCheck } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { getApiUrl } from "@/lib/api";
 
 export default function UserSettingsPage() {
   const [pubKey, setPubKey] = useState("");
@@ -65,7 +66,7 @@ export default function UserSettingsPage() {
       setPwdLoading(true);
       // First verify current password by calling login
       const email = getUserEmail();
-      const verifyRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1"}/auth/login`, {
+      const verifyRes = await fetch(`${getApiUrl()}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password: currentPwd }),
@@ -77,7 +78,7 @@ export default function UserSettingsPage() {
       }
 
       // Now set the new password
-      const setRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1"}/auth/set-password`, {
+      const setRes = await fetch(`${getApiUrl()}/auth/set-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_id: userId, password: newPwd }),

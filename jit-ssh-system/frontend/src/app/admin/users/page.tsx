@@ -5,6 +5,7 @@ import { Users, UserPlus, Settings2, RefreshCw, ShieldAlert, BadgeCheck, KeyRoun
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { getApiUrl } from "@/lib/api";
 
 export default function UsersPage() {
   const [users, setUsers] = useState<any[]>([]);
@@ -28,8 +29,8 @@ export default function UsersPage() {
     try {
       setLoading(true);
       const [uRes, tRes] = await Promise.all([
-        fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'}/users`),
-        fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'}/teams`),
+        fetch(`${getApiUrl()}/users`),
+        fetch(`${getApiUrl()}/teams`),
       ]);
       if (uRes.ok) setUsers(await uRes.json());
       if (tRes.ok) setTeams(await tRes.json());
@@ -47,7 +48,7 @@ export default function UsersPage() {
   const changeRole = async (userId: string, newRole: string) => {
     setUpdating(userId);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'}/users/${userId}/role`, {
+      const res = await fetch(`${getApiUrl()}/users/${userId}/role`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ role: newRole })
@@ -63,7 +64,7 @@ export default function UsersPage() {
   const changeTeam = async (userId: string, newTeamId: string) => {
     setUpdating(userId);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'}/users/${userId}/role`, {
+      const res = await fetch(`${getApiUrl()}/users/${userId}/role`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ team_id: newTeamId })
@@ -81,7 +82,7 @@ export default function UsersPage() {
     if (!newName.trim() || !newEmail.trim()) return;
     try {
       setSubmitting(true);
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'}/users`, {
+      const res = await fetch(`${getApiUrl()}/users`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newName, email: newEmail, role: newRole, team_id: newTeamId })
@@ -109,7 +110,7 @@ export default function UsersPage() {
   const saveName = async (userId: string) => {
     setUpdating(userId);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'}/users/${userId}/role`, {
+      const res = await fetch(`${getApiUrl()}/users/${userId}/role`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: editName })
@@ -136,7 +137,7 @@ export default function UsersPage() {
     setPwdMsg("");
     try {
       setSubmitting(true);
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'}/auth/set-password`, {
+      const res = await fetch(`${getApiUrl()}/auth/set-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_id: userId, password: newPassword })
@@ -159,7 +160,7 @@ export default function UsersPage() {
   const resetPassword = async (userId: string, userName: string, userEmail: string) => {
     try {
       setUpdating(userId);
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'}/auth/reset-password/${userId}`, {
+      const res = await fetch(`${getApiUrl()}/auth/reset-password/${userId}`, {
         method: "POST"
       });
       if (res.ok) {
@@ -177,7 +178,7 @@ export default function UsersPage() {
     if (!confirm(`Are you sure you want to permanently delete "${userName || userId}"? This cannot be undone.`)) return;
     try {
       setUpdating(userId);
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'}/users/${userId}`, {
+      const res = await fetch(`${getApiUrl()}/users/${userId}`, {
         method: "DELETE"
       });
       if (res.ok) fetchData();
@@ -191,7 +192,7 @@ export default function UsersPage() {
   const toggleStatus = async (userId: string) => {
     try {
       setUpdating(userId);
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'}/users/${userId}/status`, {
+      const res = await fetch(`${getApiUrl()}/users/${userId}/status`, {
         method: "PUT"
       });
       if (res.ok) fetchData();

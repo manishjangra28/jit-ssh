@@ -5,6 +5,7 @@ import { Server, Key, Clock, ShieldCheck, ChevronRight, RefreshCw, Eye, EyeOff }
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { getApiUrl } from "@/lib/api";
 
 function getCookie(name: string) {
   if (typeof document === "undefined") return null;
@@ -39,8 +40,8 @@ export default function DevPortal() {
     try {
       setLoading(true);
       const [srvRes, reqRes] = await Promise.all([
-        fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'}/servers`),
-        fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'}/requests`)
+        fetch(`${getApiUrl()}/servers`),
+        fetch(`${getApiUrl()}/requests`)
       ]);
       if (srvRes.ok) setServers(await srvRes.json());
       if (reqRes.ok) {
@@ -66,7 +67,7 @@ export default function DevPortal() {
     setSubmitting(true);
     
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'}/requests`, {
+      const res = await fetch(`${getApiUrl()}/requests`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

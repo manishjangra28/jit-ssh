@@ -5,6 +5,7 @@ import { Server, Tags, Plus, RefreshCw, Layers } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { getApiUrl } from "@/lib/api";
 
 export default function ServersPage() {
   const [servers, setServers] = useState<any[]>([]);
@@ -17,9 +18,9 @@ export default function ServersPage() {
     try {
       setLoading(true);
       const [srvRes, tRes, uRes] = await Promise.all([
-        fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'}/servers`),
-        fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'}/teams`),
-        fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'}/users`)
+        fetch(`${getApiUrl()}/servers`),
+        fetch(`${getApiUrl()}/teams`),
+        fetch(`${getApiUrl()}/users`)
       ]);
       if (srvRes.ok) setServers(await srvRes.json());
       if (tRes.ok) setTeams(await tRes.json());
@@ -34,7 +35,7 @@ export default function ServersPage() {
   const changeServerTeam = async (serverId: string, newTeamId: string) => {
     setUpdating(serverId);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'}/servers/${serverId}/team`, {
+      const res = await fetch(`${getApiUrl()}/servers/${serverId}/team`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ team_id: newTeamId })

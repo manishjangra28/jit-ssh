@@ -5,6 +5,7 @@ import { Server, Activity, Users, ShieldAlert, CheckCircle2, XCircle, RefreshCw,
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { getApiUrl } from "@/lib/api";
 
 export default function AdminDashboardPage() {
   const [servers, setServers] = useState<any[]>([]);
@@ -15,8 +16,8 @@ export default function AdminDashboardPage() {
     try {
       setLoading(true);
       const [srvRes, reqRes] = await Promise.all([
-        fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'}/servers`),
-        fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'}/requests`)
+        fetch(`${getApiUrl()}/servers`),
+        fetch(`${getApiUrl()}/requests`)
       ]);
       if (srvRes.ok) setServers(await srvRes.json());
       if (reqRes.ok) setRequests(await reqRes.json());
@@ -36,7 +37,7 @@ export default function AdminDashboardPage() {
   const handleApprove = async (id: string) => {
     try {
       const authId = document.cookie.split("; ").find(r => r.startsWith("jit_auth_id="))?.split("=")[1];
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'}/requests/${id}/approve`, {
+      const res = await fetch(`${getApiUrl()}/requests/${id}/approve`, {
         method: 'POST',
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ approver_id: authId })

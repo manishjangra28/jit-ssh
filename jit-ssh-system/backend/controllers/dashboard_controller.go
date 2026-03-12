@@ -100,6 +100,7 @@ func CreateRequest(c *gin.Context) {
 
 type ApproveRequestPayload struct {
 	ApproverID string `json:"approver_id"`
+	Duration   string `json:"duration"` // Optional: "5m", "1h", etc.
 }
 
 // Approvers approve the request
@@ -133,22 +134,33 @@ func ApproveRequest(c *gin.Context) {
 		}
 	}
 
-	// Assuming duration is "1h", "2h" etc. We should parse this realistically.
-	durationMap := map[string]time.Duration{
-		"1h":  time.Hour,
-		"2h":  2 * time.Hour,
-		"24h": 24 * time.Hour,
+	// Determine final duration (override vs user requested)
+	durationStr := request.Duration
+	if payload.Duration != "" {
+		durationStr = payload.Duration
 	}
-	d := durationMap[request.Duration]
+
+	d, err := time.ParseDuration(durationStr)
+	if err != nil {
+		// Try manual mapping if ParseDuration fails
+		durationMap := map[string]time.Duration{
+			"5m":  5 * time.Minute,
+			"15m": 15 * time.Minute,
+			"30m": 30 * time.Minute,
+			"1h":  time.Hour,
+			"2h":  2 * time.Hour,
+			"24h": 24 * time.Hour,
+		}
+		d = durationMap[durationStr]
+	}
+
 	if d == 0 {
 		d = time.Hour // default
 	}
 
 	request.Status = "approved"
 	request.ExpiresAt = time.Now().Add(d)
-
-	// Assume approved by same system or user token ID (mocked admin here)
-	// request.ApprovedBy = adminID
+	request.Duration = durationStr // Update duration if overridden
 
 	db.DB.Save(&request)
 
@@ -156,11 +168,41 @@ func ApproveRequest(c *gin.Context) {
 	audit := models.AuditLog{
 		UserID:   request.UserID,
 		ServerID: request.ServerID,
-		Action:   "Access Request Approved",
+		Action:   "Access Request Approved (Duration: " + durationStr + ")",
 	}
 	db.DB.Create(&audit)
 
 	c.JSON(http.StatusOK, gin.H{"status": "approved", "request": request})
+}
+
+// RevokeRequest manually expires an approved request
+func RevokeRequest(c *gin.Context) {
+	id := c.Param("id")
+	
+	var request models.AccessRequest
+	if err := db.DB.First(&request, "id = ?", id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Request not found"})
+		return
+	}
+
+	if request.Status != "approved" && request.Status != "active" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Only active/approved requests can be revoked"})
+		return
+	}
+
+	request.Status = "expired"
+	request.ExpiresAt = time.Now() // Expire immediately
+	db.DB.Save(&request)
+
+	// Audit Log
+	audit := models.AuditLog{
+		UserID:   request.UserID,
+		ServerID: request.ServerID,
+		Action:   "Access Request Revoked by Admin",
+	}
+	db.DB.Create(&audit)
+
+	c.JSON(http.StatusOK, gin.H{"message": "Access revoked. The agent will remove this user in the next polling cycle."})
 }
 
 // Get Logs

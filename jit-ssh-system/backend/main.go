@@ -80,6 +80,7 @@ func main() {
 		api.GET("/requests", controllers.GetRequests)
 		api.POST("/requests", controllers.CreateRequest)
 		api.POST("/requests/:id/approve", controllers.ApproveRequest)
+		api.POST("/requests/:id/revoke", controllers.RevokeRequest)
 		api.GET("/logs", controllers.GetLogs)
 
 		// User Management API

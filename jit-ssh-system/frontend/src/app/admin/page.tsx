@@ -34,19 +34,40 @@ export default function AdminDashboardPage() {
     return () => clearInterval(intv);
   }, []);
 
-  const handleApprove = async (id: string) => {
+  const handleApprove = async (id: string, duration?: string) => {
     try {
       const authId = document.cookie.split("; ").find(r => r.startsWith("jit_auth_id="))?.split("=")[1];
       const res = await fetch(`${getApiUrl()}/requests/${id}/approve`, {
         method: 'POST',
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ approver_id: authId })
+        body: JSON.stringify({ 
+          approver_id: authId,
+          duration: duration 
+        })
       });
       if (!res.ok) {
         const err = await res.json();
         alert(err.error || "Failed to approve request");
       } else {
         fetchData();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleRevoke = async (id: string) => {
+    if (!confirm("Are you sure you want to revoke this access immediately?")) return;
+    try {
+      const res = await fetch(`${getApiUrl()}/requests/${id}/revoke`, {
+        method: 'POST',
+        headers: { "Content-Type": "application/json" }
+      });
+      if (res.ok) {
+        fetchData();
+      } else {
+        const err = await res.json();
+        alert(err.error || "Failed to revoke access");
       }
     } catch (e) {
       console.error(e);
@@ -162,13 +183,30 @@ export default function AdminDashboardPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" className="h-8 gap-1 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10 border-emerald-500/20" onClick={() => handleApprove(req.id)}>
-                      <CheckCircle2 className="w-4 h-4" /> Approve
-                    </Button>
-                    <Button variant="outline" size="sm" className="h-8 gap-1 text-destructive hover:bg-destructive/10 border-destructive/20" onClick={() => handleReject(req.id, true)}>
-                      <XCircle className="w-4 h-4" /> Reject
-                    </Button>
+                  <div className="flex flex-col gap-2 items-end">
+                    <select 
+                      className="text-[10px] bg-background border rounded px-1 h-6 focus:ring-0 outline-none"
+                      id={`duration-${req.id}`}
+                      defaultValue={req.duration}
+                    >
+                      <option value="5m">5m</option>
+                      <option value="15m">15m</option>
+                      <option value="30m">30m</option>
+                      <option value="1h">1h</option>
+                      <option value="4h">4h</option>
+                      <option value="24h">24h</option>
+                    </select>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" className="h-8 gap-1 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10 border-emerald-500/20" onClick={() => {
+                        const dur = (document.getElementById(`duration-${req.id}`) as HTMLSelectElement).value;
+                        handleApprove(req.id, dur);
+                      }}>
+                        <CheckCircle2 className="w-4 h-4" /> Approve
+                      </Button>
+                      <Button variant="outline" size="sm" className="h-8 gap-1 text-destructive hover:bg-destructive/10 border-destructive/20" onClick={() => handleReject(req.id, true)}>
+                        <XCircle className="w-4 h-4" /> Reject
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -176,37 +214,65 @@ export default function AdminDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Server Fleet Status */}
-        <Card className="col-span-3 bg-card/60 border-border backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle>Fleet Status</CardTitle>
-            <CardDescription>
-              Registered JIT Agents across your infrastructure.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {servers.length === 0 ? (
-                 <div className="text-center py-4 text-muted-foreground text-sm">No servers registered.</div>
-              ) : servers.map(srv => (
-                <div key={srv.id} className="flex items-center justify-between p-3 border rounded-lg bg-background/50">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${srv.status === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-muted-foreground'}`}></div>
-                      <h4 className="font-medium text-sm">{srv.hostname}</h4>
+        {/* Active Sessions & Fleet Status */}
+        <div className="col-span-3 space-y-6">
+          <Card className="bg-card/60 border-border backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle>Active Access</CardTitle>
+              <CardDescription>Currently granted SSH sessions.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {requests.filter(r => r.status === 'approved' || r.status === 'active').length === 0 ? (
+                  <div className="text-center py-4 text-muted-foreground text-xs">No active sessions.</div>
+                ) : requests.filter(r => r.status === 'approved' || r.status === 'active').map(req => (
+                  <div key={req.id} className="p-3 border rounded-lg bg-background/40 flex justify-between items-center">
+                    <div>
+                      <h4 className="font-medium text-xs text-primary">{req.user?.name || "User"}</h4>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        {req.server?.hostname} • Expires {new Date(req.expires_at).toLocaleTimeString()}
+                      </p>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1 font-mono">{srv.ip}</p>
+                    <Button variant="ghost" size="sm" className="h-7 text-[10px] text-destructive hover:bg-destructive/10" onClick={() => handleRevoke(req.id)}>
+                      Revoke
+                    </Button>
                   </div>
-                  <div className="flex gap-2">
-                    {srv.tags?.map((t: any) => (
-                       <Badge key={t.id} variant="secondary" className="text-[10px]">{t.k}: {t.v}</Badge>
-                    ))}
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card/60 border-border backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle>Fleet Status</CardTitle>
+              <CardDescription>
+                Registered JIT Agents across your infrastructure.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {servers.length === 0 ? (
+                   <div className="text-center py-4 text-muted-foreground text-sm">No servers registered.</div>
+                ) : servers.map(srv => (
+                  <div key={srv.id} className="flex items-center justify-between p-3 border rounded-lg bg-background/50">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${srv.status === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-muted-foreground'}`}></div>
+                        <h4 className="font-medium text-sm">{srv.hostname}</h4>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1 font-mono">{srv.ip}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      {srv.tags?.map((t: any) => (
+                         <Badge key={t.id} variant="secondary" className="text-[10px]">{t.k}: {t.v}</Badge>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
         
       </div>
     </>

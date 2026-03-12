@@ -180,6 +180,9 @@ export default function DevPortal() {
                       value={duration}
                       onChange={(e) => setDuration(e.target.value)}
                     >
+                      <option value="5m">5 Minutes</option>
+                      <option value="15m">15 Minutes</option>
+                      <option value="30m">30 Minutes</option>
                       <option value="1h">1 Hour (Recommended)</option>
                       <option value="4h">4 Hours</option>
                       <option value="8h">8 Hours (Full Shift)</option>

@@ -26,9 +26,9 @@ func NewSystemHandler() *SystemHandler {
 	return &SystemHandler{IsMock: mock}
 }
 
-func (s *SystemHandler) CreateUser(username, pubKey string, sudo bool) error {
+func (s *SystemHandler) CreateUser(username, pubKey string, sudo bool, path, services string) error {
 	if s.IsMock {
-		log.Printf("[MOCK] Created user %s with sudo=%v\n", username, sudo)
+		log.Printf("[MOCK] Created user %s with sudo=%v path=%s services=%s\n", username, sudo, path, services)
 		log.Printf("[MOCK] Added pubKey to %s authorized_keys\n", username)
 		return nil
 	}
@@ -65,6 +65,25 @@ func (s *SystemHandler) CreateUser(username, pubKey string, sudo bool) error {
 		if err := os.WriteFile(sudoerFile, []byte(sudoContent), 0440); err != nil {
 			return fmt.Errorf("failed to create sudoers file: %v", err)
 		}
+	}
+
+	// 5. Add to Services Groups (e.g. docker)
+	if services != "" {
+		for _, svc := range strings.Split(services, ",") {
+			svc = strings.TrimSpace(svc)
+			if svc == "" { continue }
+			log.Printf("Adding user %s to group %s", username, svc)
+			// usermod -aG <group> <user>
+			exec.Command("usermod", "-aG", svc, username).Run()
+		}
+	}
+
+	// 6. Path Permissions (ACL)
+	if path != "" {
+		log.Printf("Granting user %s access to path %s", username, path)
+		// setfacl -m u:<user>:rx <path>
+		// We use -R for recursive if it's a directory
+		exec.Command("setfacl", "-R", "-m", fmt.Sprintf("u:%s:rx", username), path).Run()
 	}
 
 	log.Printf("Successfully created user %s", username)

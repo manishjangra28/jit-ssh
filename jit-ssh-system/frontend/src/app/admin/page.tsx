@@ -176,6 +176,8 @@ export default function AdminDashboardPage() {
                         <p className="text-xs text-muted-foreground flex items-center gap-2">
                           <Clock className="w-3 h-3" /> {req.duration}
                           {req.sudo && <span className="text-destructive flex items-center gap-1 ml-2"><ShieldAlert className="w-3 h-3"/> Sudo</span>}
+                          {req.requested_path && <span className="text-blue-400 flex items-center gap-1 ml-2">Path: {req.requested_path}</span>}
+                          {req.requested_services && <span className="text-emerald-400 flex items-center gap-1 ml-2">Svc: {req.requested_services}</span>}
                         </p>
                         <p className="text-[10px] text-muted-foreground/70 font-mono flex items-center gap-1">
                           <Key className="w-3 h-3" /> {req.pub_key ? `${req.pub_key.substring(0, 25)}••••••••••••` : "No Key"}

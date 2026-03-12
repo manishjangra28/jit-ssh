@@ -71,10 +71,12 @@ type AccessRequest struct {
 	PubKey     string    `gorm:"type:text;not null" json:"pub_key"`
 	Sudo       bool      `gorm:"not null;default:false" json:"sudo"`
 	Duration   string    `gorm:"type:interval;not null" json:"duration"`
-	Status     string    `gorm:"type:varchar(50);not null;default:'pending'" json:"status"`
-	ApprovedBy uuid.UUID `gorm:"type:uuid" json:"approved_by,omitempty"`
-	ExpiresAt  time.Time `json:"expires_at,omitempty"`
-	CreatedAt  time.Time `gorm:"autoCreateTime" json:"created_at"`
+	Status            string    `gorm:"type:varchar(50);not null;default:'pending'" json:"status"`
+	RequestedPath     string    `gorm:"type:varchar(255)" json:"requested_path"`      // e.g. /home/ec2-user
+	RequestedServices string    `gorm:"type:varchar(255)" json:"requested_services"` // e.g. docker,mysql
+	ApprovedBy        uuid.UUID `gorm:"type:uuid" json:"approved_by,omitempty"`
+	ExpiresAt         time.Time `json:"expires_at,omitempty"`
+	CreatedAt         time.Time `gorm:"autoCreateTime" json:"created_at"`
 
 	User   User   `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE;" json:"user"`
 	Server Server `gorm:"foreignKey:ServerID;constraint:OnDelete:CASCADE;" json:"server"`

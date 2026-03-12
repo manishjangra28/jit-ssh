@@ -33,6 +33,9 @@ func main() {
 		log.Fatalf("failed to auto migrate models: %v", err)
 	}
 
+	// Seed database with default admin if empty
+	db.SeedDB()
+
 	// Setup Router
 	r := gin.Default()
 

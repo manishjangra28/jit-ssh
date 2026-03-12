@@ -112,12 +112,30 @@ if [ -n "$AGENT_BINARY_URL" ]; then
   curl -fsSL -o "$BIN_PATH" "$AGENT_BINARY_URL"
   chmod +x "$BIN_PATH"
   echo "[ok] Binary installed to $BIN_PATH"
-elif [ -f "./jit-agent" ]; then
-  cp ./jit-agent "$BIN_PATH"
-  chmod +x "$BIN_PATH"
-  echo "[ok] Local binary copied to $BIN_PATH"
 else
-  echo "[warn] No binary found. Place the jit-agent binary at $BIN_PATH manually."
+  # Try to find or build local binary
+  SOURCE_BIN=""
+  if [ -f "./jit-agent" ]; then
+    SOURCE_BIN="./jit-agent"
+  elif [ -f "./agent" ]; then
+    SOURCE_BIN="./agent"
+  elif [ -f "./bin/agent" ]; then
+    SOURCE_BIN="./bin/agent"
+  elif command -v go &>/dev/null; then
+    echo "[info] Binary missing, but 'go' found. Building 'jit-agent'..."
+    go build -o jit-agent . || echo "[error] Go build failed."
+    [ -f "./jit-agent" ] && SOURCE_BIN="./jit-agent"
+  fi
+
+  if [ -n "$SOURCE_BIN" ]; then
+    cp "$SOURCE_BIN" "$BIN_PATH"
+    chmod +x "$BIN_PATH"
+    echo "[ok] Binary $SOURCE_BIN copied to $BIN_PATH"
+  else
+    echo "ERROR: No jit-agent binary found at ./jit-agent or ./agent, and couldn't build it." >&2
+    echo "Please build the agent first (go build -o jit-agent) or provide --binary-url." >&2
+    exit 1
+  fi
 fi
 
 # ------- Create systemd service -------

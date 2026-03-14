@@ -2,7 +2,13 @@
 
 import { useState } from "react";
 import { ShieldCheck, Eye, EyeOff, ArrowRight } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getApiUrl } from "@/lib/api";
 
@@ -29,18 +35,21 @@ export default function LoginPage() {
 
       if (!res.ok) {
         if (data.error === "password_not_set") {
-          setError("Your account has no password yet. Please ask the admin to set one for you.");
+          setError(
+            "Your account has no password yet. Please ask the admin to set one for you.",
+          );
         } else {
           setError(data.error || "Login failed");
         }
         return;
       }
 
-      // Store auth info in cookies (max-age = 24 hours)
-      document.cookie = `jit_auth_role=${data.role}; path=/; max-age=86400`;
-      document.cookie = `jit_auth_name=${encodeURIComponent(data.name || data.email)}; path=/; max-age=86400`;
-      document.cookie = `jit_auth_id=${data.id}; path=/; max-age=86400`;
-      document.cookie = `jit_auth_email=${encodeURIComponent(data.email)}; path=/; max-age=86400`;
+      // Store profile and signed token cookies for frontend routing + API auth
+      document.cookie = `jit_auth_role=${data.role}; path=/; max-age=28800`;
+      document.cookie = `jit_auth_name=${encodeURIComponent(data.name || data.email)}; path=/; max-age=28800`;
+      document.cookie = `jit_auth_id=${data.id}; path=/; max-age=28800`;
+      document.cookie = `jit_auth_email=${encodeURIComponent(data.email)}; path=/; max-age=28800`;
+      document.cookie = `jit_auth_token=${data.token}; path=/; max-age=28800`;
 
       // Redirect: admin/approver → /admin, developer → /
       const isAdminPortal = data.role === "admin" || data.role === "approver";
@@ -59,13 +68,17 @@ export default function LoginPage() {
           <ShieldCheck className="w-8 h-8 text-white" />
         </div>
         <h1 className="text-3xl font-bold tracking-tight">JIT SSH System</h1>
-        <p className="text-muted-foreground mt-2">Sign in with your email and password</p>
+        <p className="text-muted-foreground mt-2">
+          Sign in with your email and password
+        </p>
       </div>
 
       <Card className="w-full max-w-md">
         <CardHeader className="pb-2">
           <CardTitle>Welcome back</CardTitle>
-          <CardDescription>Works for all roles — Developer, Approver, Admin</CardDescription>
+          <CardDescription>
+            Works for all roles — Developer, Approver, Admin
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
@@ -98,7 +111,11 @@ export default function LoginPage() {
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   onClick={() => setShowPwd(!showPwd)}
                 >
-                  {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {showPwd ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
                 </button>
               </div>
             </div>
@@ -110,19 +127,36 @@ export default function LoginPage() {
             )}
 
             <Button type="submit" className="w-full gap-2" disabled={loading}>
-              {loading ? "Signing in..." : (<>Sign In <ArrowRight className="w-4 h-4" /></>)}
+              {loading ? (
+                "Signing in..."
+              ) : (
+                <>
+                  Sign In <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </Button>
           </form>
 
           <div className="mt-4 pt-4 border-t border-border text-xs text-muted-foreground space-y-1">
-            <p>🔐 <strong>Admins</strong> and <strong>Approvers</strong> will be redirected to <code>/admin</code></p>
-            <p>💻 <strong>Developers</strong> will be redirected to the user portal</p>
-            <p className="pt-1">No password? Ask your admin to set one via the User Management panel.</p>
+            <p>
+              🔐 <strong>Admins</strong> and <strong>Approvers</strong> will be
+              redirected to <code>/admin</code>
+            </p>
+            <p>
+              💻 <strong>Developers</strong> will be redirected to the user
+              portal
+            </p>
+            <p className="pt-1">
+              No password? Ask your admin to set one via the User Management
+              panel.
+            </p>
           </div>
         </CardContent>
       </Card>
 
-      <p className="mt-8 text-sm text-muted-foreground">Internal Network Access Only</p>
+      <p className="mt-8 text-sm text-muted-foreground">
+        Internal Network Access Only
+      </p>
     </div>
   );
 }

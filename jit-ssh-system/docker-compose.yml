@@ -18,7 +18,7 @@ services:
       retries: 5
 
   backend:
-    build: 
+    build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: jit_backend
@@ -29,6 +29,7 @@ services:
       DB_NAME: jit_db
       DB_PORT: 5432
       PORT: 8080
+      JIT_MASTER_KEY: "a3ZPZE4vM2k5a1lZN0xMZEdjRmNxOWF2YjNSNG1oN1A=" # Valid 32-byte base64 key
     ports:
       - "8080:8080"
     depends_on:

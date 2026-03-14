@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"math/big"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/manishjangra/jit-ssh-system/backend/db"
@@ -51,13 +52,27 @@ func Login(c *gin.Context) {
 		return
 	}
 
+	token, err := issueSessionToken(user.ID, user.Role, user.Email, user.Name)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create session"})
+		return
+	}
+
+	c.SetCookie("jit_auth_token", token, int(sessionDuration.Seconds()), "/", "", false, false)
+	c.SetCookie("jit_auth_role", user.Role, int(sessionDuration.Seconds()), "/", "", false, false)
+	c.SetCookie("jit_auth_name", user.Name, int(sessionDuration.Seconds()), "/", "", false, false)
+	c.SetCookie("jit_auth_id", user.ID.String(), int(sessionDuration.Seconds()), "/", "", false, false)
+	c.SetCookie("jit_auth_email", user.Email, int(sessionDuration.Seconds()), "/", "", false, false)
+
 	// Return user info (frontend will set cookies)
 	c.JSON(http.StatusOK, gin.H{
-		"id":    user.ID,
-		"name":  user.Name,
-		"email": user.Email,
-		"role":  user.Role,
-		"team":  user.Team,
+		"id":         user.ID,
+		"name":       user.Name,
+		"email":      user.Email,
+		"role":       user.Role,
+		"team":       user.Team,
+		"token":      token,
+		"expires_at": time.Now().Add(sessionDuration),
 	})
 }
 
@@ -71,6 +86,13 @@ func SetPassword(c *gin.Context) {
 	var payload SetPasswordPayload
 	if err := c.ShouldBindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	callerID := currentUserID(c)
+	callerRole := currentUserRole(c)
+	if callerRole != "admin" && callerID != payload.UserID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden"})
 		return
 	}
 
@@ -90,6 +112,11 @@ func SetPassword(c *gin.Context) {
 
 // ResetPassword generates a fresh random password and returns it to the admin
 func ResetPassword(c *gin.Context) {
+	if currentUserRole(c) != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden"})
+		return
+	}
+
 	userID := c.Param("id")
 
 	plain := generateRandomPassword(12)

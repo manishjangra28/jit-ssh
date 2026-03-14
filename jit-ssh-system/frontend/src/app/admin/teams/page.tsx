@@ -5,7 +5,7 @@ import { Layers, Plus, RefreshCw, Users } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { getApiUrl } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 
 export default function TeamsPage() {
   const [teams, setTeams] = useState<any[]>([]);
@@ -21,7 +21,7 @@ export default function TeamsPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${getApiUrl()}/teams`);
+      const res = await apiFetch("/teams");
       if (res.ok) setTeams(await res.json());
     } catch (e) {
       console.error(e);
@@ -39,7 +39,7 @@ export default function TeamsPage() {
     if (!newName.trim()) return;
     try {
       setSubmitting(true);
-      const res = await fetch(`${getApiUrl()}/teams`, {
+      const res = await apiFetch("/teams", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newName, description: newDesc })
@@ -61,7 +61,7 @@ export default function TeamsPage() {
     if (!editName.trim()) return;
     try {
       setSubmitting(true);
-      const res = await fetch(`${getApiUrl()}/teams/${id}`, {
+      const res = await apiFetch(`/teams/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: editName, description: editDesc })

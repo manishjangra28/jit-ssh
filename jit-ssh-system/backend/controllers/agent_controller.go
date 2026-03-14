@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -12,6 +13,20 @@ import (
 	"github.com/manishjangra/jit-ssh-system/backend/models"
 	"gorm.io/gorm"
 )
+
+func authorizeAgentServer(c *gin.Context, serverID uuid.UUID) bool {
+	tokenServerRaw, exists := c.Get("agent_token_server_id")
+	if !exists || tokenServerRaw == nil {
+		return true
+	}
+
+	tokenServerID, ok := tokenServerRaw.(*uuid.UUID)
+	if !ok || tokenServerID == nil {
+		return true
+	}
+
+	return *tokenServerID == serverID
+}
 
 type RegisterRequest struct {
 	Hostname   string            `json:"hostname" binding:"required"`
@@ -49,18 +64,23 @@ func RegisterAgent(c *gin.Context) {
 	// Insert or update server using AgentID as unique key
 	var existingServer models.Server
 	result := db.DB.Where("agent_id = ?", req.AgentID).First(&existingServer)
-	
+
 	if result.Error == gorm.ErrRecordNotFound {
 		if err := db.DB.Create(&server).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to register server"})
 			return
 		}
 	} else {
+		if !authorizeAgentServer(c, existingServer.ID) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Agent token is already bound to a different server"})
+			return
+		}
+
 		// Update existing server
 		server.ID = existingServer.ID
 		// Clear existing tags to prevent duplicates (cascade delete logic handles it or we manually delete)
 		db.DB.Where("server_id = ?", existingServer.ID).Delete(&models.ServerTag{})
-		
+
 		if err := db.DB.Save(&server).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update server"})
 			return
@@ -87,6 +107,16 @@ func HeartbeatAgent(c *gin.Context) {
 	var req HeartbeatRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var server models.Server
+	if err := db.DB.Where("agent_id = ?", req.AgentID).First(&server).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Agent not registered"})
+		return
+	}
+	if !authorizeAgentServer(c, server.ID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Agent token is not authorized for this server"})
 		return
 	}
 
@@ -124,14 +154,18 @@ func GetAgentTasks(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
 		return
 	}
+	if !authorizeAgentServer(c, server.ID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Agent token is not authorized for this server"})
+		return
+	}
 
 	var tasks []models.AccessRequest
-	
+
 	// Example logic:
 	// Find requests for this server that are conceptually pending application by the agent.
 	// For example, 'approved' requests that haven't been completed yet.
 	// (In a real system, you'd add a status like 'CREATE_PENDING', 'DELETE_PENDING')
-	
+
 	// Let's fetch the list of active/approved access requests that the agent should fulfill.
 	db.DB.Where("server_id = ? AND status IN ('approved', 'expired')", server.ID).Find(&tasks)
 
@@ -142,6 +176,8 @@ func GetAgentTasks(c *gin.Context) {
 		Username  string `json:"username"`
 		PubKey    string `json:"pubkey"`
 		Sudo      bool   `json:"sudo"`
+		Path      string `json:"path"`
+		Services  string `json:"services"`
 		ExpiresAt string `json:"expires_at"`
 	}
 
@@ -153,11 +189,11 @@ func GetAgentTasks(c *gin.Context) {
 		} else if t.Status == "expired" {
 			taskType = "DELETE_USER"
 		}
-		
+
 		var user models.User
 		db.DB.First(&user, t.UserID)
-		
-		// Sanitize Username: Linux useradd is strict. 
+
+		// Sanitize Username: Linux useradd is strict.
 		// We use the email prefix and replace dots/special chars.
 		username := sanitizeUsername(user.Email)
 
@@ -167,6 +203,8 @@ func GetAgentTasks(c *gin.Context) {
 			Username:  username,
 			PubKey:    t.PubKey,
 			Sudo:      t.Sudo,
+			Path:      t.RequestedPath,
+			Services:  t.RequestedServices,
 			ExpiresAt: t.ExpiresAt.Format(time.RFC3339),
 		})
 	}
@@ -177,7 +215,7 @@ func GetAgentTasks(c *gin.Context) {
 func sanitizeUsername(email string) string {
 	// 1. Get prefix (before @)
 	prefix := strings.Split(email, "@")[0]
-	
+
 	// 2. Replace non-alphanumeric (like dots) with underscores
 	// Linux useradd usually allows: [a-z_][a-z0-9_-]*
 	res := ""
@@ -188,12 +226,12 @@ func sanitizeUsername(email string) string {
 			res += "_"
 		}
 	}
-	
+
 	// Ensure it doesn't start with a number or underscore (standard best practice)
 	if len(res) > 0 && (res[0] >= '0' && res[0] <= '9') {
 		res = "u_" + res
 	}
-	
+
 	return strings.ToLower(res)
 }
 
@@ -222,6 +260,10 @@ func CompleteAgentTask(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized agent ID for task"})
 		return
 	}
+	if !authorizeAgentServer(c, server.ID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Agent token is not authorized for this server"})
+		return
+	}
 
 	log.Printf("Agent %s completed task %s with status %s", req.AgentID, taskID, req.Status)
 
@@ -230,10 +272,90 @@ func CompleteAgentTask(c *gin.Context) {
 	} else if req.Status == "deleted" {
 		task.Status = "completed" // Full lifecycle done
 	} else if req.Status == "failed" {
-		task.Status = "failed"
+		// If task fails (e.g. exit status 9 during useradd), we revert it to 'approved'
+		// so the agent will fetch it and try again on the next polling cycle.
+		// If it was a DELETE task that failed, we revert it to 'expired' to retry deletion.
+		if task.Status == "active" {
+			task.Status = "expired" // Retry delete
+		} else {
+			task.Status = "approved" // Retry create
+		}
 	}
 
 	db.DB.Save(&task)
 
 	c.JSON(http.StatusOK, gin.H{"status": "task_updated"})
+}
+
+type LoginReportRequest struct {
+	AgentID   string `json:"agent_id" binding:"required"`
+	Username  string `json:"username" binding:"required"`
+	RemoteIP  string `json:"remote_ip"`
+	Type      string `json:"type" binding:"required"` // login or logout
+	Timestamp string `json:"timestamp"`
+}
+
+func ReportLogin(c *gin.Context) {
+	var req LoginReportRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Find server
+	var server models.Server
+	if err := db.DB.Where("agent_id = ?", req.AgentID).First(&server).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+	if !authorizeAgentServer(c, server.ID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Agent token is not authorized for this server"})
+		return
+	}
+
+	// Find user by sanitized username (this is a bit tricky if multiple users have same prefix,
+	// but normally JIT handles this. We'll search for active requests for this username/server)
+
+	// Let's assume the username is enough to find the user in our system.
+	// We'll search for users where sanitizeUsername(email) == req.Username
+	var allUsers []models.User
+	db.DB.Find(&allUsers)
+	var userID uuid.UUID
+	for _, u := range allUsers {
+		if sanitizeUsername(u.Email) == req.Username {
+			userID = u.ID
+			break
+		}
+	}
+
+	if userID == uuid.Nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not identified"})
+		return
+	}
+
+	t, _ := time.Parse(time.RFC3339, req.Timestamp)
+	if req.Timestamp == "" {
+		t = time.Now()
+	}
+
+	event := models.LoginEvent{
+		UserID:    userID,
+		ServerID:  server.ID,
+		Username:  req.Username,
+		RemoteIP:  req.RemoteIP,
+		LoginTime: t,
+		Type:      req.Type,
+	}
+
+	db.DB.Create(&event)
+
+	// Also add to audit log for visibility
+	action := fmt.Sprintf("User %s logged %s to %s from %s", req.Username, req.Type, server.Hostname, req.RemoteIP)
+	db.DB.Create(&models.AuditLog{
+		UserID:   userID,
+		ServerID: server.ID,
+		Action:   action,
+	})
+
+	c.JSON(http.StatusOK, gin.H{"status": "reported"})
 }

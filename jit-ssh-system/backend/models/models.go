@@ -70,7 +70,7 @@ type AccessRequest struct {
 	ServerID   uuid.UUID `gorm:"type:uuid;not null" json:"server_id"`
 	PubKey     string    `gorm:"type:text;not null" json:"pub_key"`
 	Sudo       bool      `gorm:"not null;default:false" json:"sudo"`
-	Duration   string    `gorm:"type:interval;not null" json:"duration"`
+	Duration          string    `gorm:"type:interval;not null" json:"duration"`
 	Status            string    `gorm:"type:varchar(50);not null;default:'pending'" json:"status"`
 	RequestedPath     string    `gorm:"type:varchar(255)" json:"requested_path"`      // e.g. /home/ec2-user
 	RequestedServices string    `gorm:"type:varchar(255)" json:"requested_services"` // e.g. docker,mysql
@@ -130,4 +130,27 @@ func (al *AuditLog) BeforeCreate(tx *gorm.DB) (err error) {
 		al.ID = uuid.New()
 	}
 	return
+}
+
+type LoginEvent struct {
+	ID        uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	UserID    uuid.UUID `gorm:"type:uuid;not null" json:"user_id"`
+	ServerID  uuid.UUID `gorm:"type:uuid;not null" json:"server_id"`
+	Username  string    `json:"username"`
+	RemoteIP  string    `json:"remote_ip"`
+	LoginTime time.Time `json:"login_time"`
+	Type      string    `json:"type"` // "login" or "logout"
+	
+	User   User   `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	Server Server `gorm:"foreignKey:ServerID" json:"server,omitempty"`
+}
+
+type Notification struct {
+	ID        uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	UserID    uuid.UUID `gorm:"type:uuid;not null" json:"user_id"` // Recipient
+	Title     string    `json:"title"`
+	Message   string    `json:"message"`
+	Type      string    `json:"type"` // "info", "success", "warning", "error"
+	IsRead    bool      `gorm:"default:false" json:"is_read"`
+	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
 }

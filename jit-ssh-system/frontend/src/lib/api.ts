@@ -26,3 +26,25 @@ export const getApiUrl = () => {
   // 3. Server-side default (for SSR/Prefetching)
   return "http://localhost:8080/api/v1";
 };
+
+const getCookie = (name: string) => {
+  if (typeof document === "undefined") return null;
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop()?.split(";").shift() || null;
+  return null;
+};
+
+export const apiFetch = (path: string, init: RequestInit = {}) => {
+  const token = getCookie("jit_auth_token");
+  const headers = new Headers(init.headers || {});
+
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  return fetch(`${getApiUrl()}${path}`, {
+    ...init,
+    headers,
+  });
+};

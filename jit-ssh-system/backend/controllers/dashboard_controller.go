@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/manishjangra/jit-ssh-system/backend/db"
 	"github.com/manishjangra/jit-ssh-system/backend/models"
 )
@@ -59,17 +60,23 @@ func UpdateServerTeam(c *gin.Context) {
 
 func GetRequests(c *gin.Context) {
 	var requests []models.AccessRequest
-	db.DB.Preload("User").Preload("Server").Find(&requests)
+	query := db.DB.Preload("User").Preload("Server")
+	if !isAdminOrApprover(c) {
+		query = query.Where("user_id = ?", currentUserID(c))
+	}
+	query.Find(&requests)
 	c.JSON(http.StatusOK, requests)
 }
 
+
 type CreateAccessRequestPayload struct {
-	ServerID  string `json:"server_id" binding:"required"`
-	UserID    string `json:"user_id" binding:"required"` // Assuming requested by generic user payload for now
-	PubKey    string `json:"pub_key" binding:"required"`
-	Duration  string `json:"duration" binding:"required"` // e.g. '1h'
-	Sudo      bool   `json:"sudo"`
-	Reason    string `json:"reason"`
+	ServerID          string `json:"server_id" binding:"required"`
+	PubKey            string `json:"pub_key" binding:"required"`
+	Duration          string `json:"duration" binding:"required"`
+	Sudo              bool   `json:"sudo"`
+	RequestedPath     string `json:"requested_path"`
+	RequestedServices string `json:"requested_services"`
+	Reason            string `json:"reason"`
 }
 
 func CreateRequest(c *gin.Context) {
@@ -79,15 +86,15 @@ func CreateRequest(c *gin.Context) {
 		return
 	}
 
-	// Basic duration parsing (mocked here as simple interval storage)
-	// We leave duration as string for postgres INTERVAL type or parse it to ExpireAt in Approve
 	request := models.AccessRequest{
-		ServerID: db.ParseUUID(req.ServerID),
-		UserID:   db.ParseUUID(req.UserID),
-		PubKey:   req.PubKey,
-		Duration: req.Duration,
-		Sudo:     req.Sudo,
-		Status:   "pending",
+		ServerID:          db.ParseUUID(req.ServerID),
+		UserID:            db.ParseUUID(currentUserID(c)),
+		PubKey:            req.PubKey,
+		Duration:          req.Duration,
+		Sudo:              req.Sudo,
+		RequestedPath:     req.RequestedPath,
+		RequestedServices: req.RequestedServices,
+		Status:            "pending",
 	}
 
 	if err := db.DB.Create(&request).Error; err != nil {
@@ -95,11 +102,17 @@ func CreateRequest(c *gin.Context) {
 		return
 	}
 
+	// Notify all admins
+	var admins []models.User
+	db.DB.Where("role = ?", "admin").Find(&admins)
+	for _, admin := range admins {
+		createNotification(admin.ID, "New Access Request", "A new request is pending for " + request.Duration + " access.", "info")
+	}
+
 	c.JSON(http.StatusCreated, request)
 }
 
 type ApproveRequestPayload struct {
-	ApproverID string `json:"approver_id"`
 	Duration   string `json:"duration"` // Optional: "5m", "1h", etc.
 }
 
@@ -122,9 +135,10 @@ func ApproveRequest(c *gin.Context) {
 	}
 
 	// RBAC Verification
-	if payload.ApproverID != "" {
+	approverID := currentUserID(c)
+	if approverID != "" {
 		var approver models.User
-		if err := db.DB.First(&approver, "id = ?", payload.ApproverID).Error; err == nil {
+		if err := db.DB.First(&approver, "id = ?", approverID).Error; err == nil {
 			if approver.Role == "approver" {
 				if request.Server.TeamID == nil || approver.TeamID == nil || *request.Server.TeamID != *approver.TeamID {
 					c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: You can only approve requests for servers assigned to your team."})
@@ -161,6 +175,7 @@ func ApproveRequest(c *gin.Context) {
 	request.Status = "approved"
 	request.ExpiresAt = time.Now().Add(d)
 	request.Duration = durationStr // Update duration if overridden
+	request.ApprovedBy = db.ParseUUID(approverID)
 
 	db.DB.Save(&request)
 
@@ -172,7 +187,42 @@ func ApproveRequest(c *gin.Context) {
 	}
 	db.DB.Create(&audit)
 
+	// Notify asking user
+	createNotification(request.UserID, "Access Approved", "Your request for " + request.Server.Hostname + " has been approved.", "success")
+
 	c.JSON(http.StatusOK, gin.H{"status": "approved", "request": request})
+}
+
+// RejectRequest denies a pending request
+func RejectRequest(c *gin.Context) {
+	id := c.Param("id")
+	
+	var request models.AccessRequest
+	if err := db.DB.Preload("Server").First(&request, "id = ?", id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Request not found"})
+		return
+	}
+
+	if request.Status != "pending" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Only pending requests can be rejected"})
+		return
+	}
+
+	request.Status = "rejected"
+	db.DB.Save(&request)
+
+	// Audit Log
+	audit := models.AuditLog{
+		UserID:   request.UserID,
+		ServerID: request.ServerID,
+		Action:   "Access Request Rejected by Admin",
+	}
+	db.DB.Create(&audit)
+
+	// Notify asking user
+	createNotification(request.UserID, "Access Rejected", "Your access request for " + request.Server.Hostname + " has been rejected.", "error")
+
+	c.JSON(http.StatusOK, gin.H{"message": "Request rejected"})
 }
 
 // RevokeRequest manually expires an approved request
@@ -180,7 +230,7 @@ func RevokeRequest(c *gin.Context) {
 	id := c.Param("id")
 	
 	var request models.AccessRequest
-	if err := db.DB.First(&request, "id = ?", id).Error; err != nil {
+	if err := db.DB.Preload("Server").First(&request, "id = ?", id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Request not found"})
 		return
 	}
@@ -202,6 +252,9 @@ func RevokeRequest(c *gin.Context) {
 	}
 	db.DB.Create(&audit)
 
+	// Notify asking user
+	createNotification(request.UserID, "Access Revoked", "Your access to " + request.Server.Hostname + " has been manually revoked by an admin.", "warning")
+
 	c.JSON(http.StatusOK, gin.H{"message": "Access revoked. The agent will remove this user in the next polling cycle."})
 }
 
@@ -210,4 +263,45 @@ func GetLogs(c *gin.Context) {
 	var logs []models.AuditLog
 	db.DB.Order("timestamp desc").Limit(100).Find(&logs)
 	c.JSON(http.StatusOK, logs)
+}
+
+func GetNotifications(c *gin.Context) {
+	userID := db.ParseUUID(currentUserID(c))
+	var notifications []models.Notification
+	db.DB.Where("user_id = ?", userID).Order("created_at desc").Limit(20).Find(&notifications)
+	c.JSON(http.StatusOK, notifications)
+}
+
+func MarkNotificationRead(c *gin.Context) {
+	id := c.Param("id")
+	db.DB.Model(&models.Notification{}).
+		Where("id = ? AND user_id = ?", id, db.ParseUUID(currentUserID(c))).
+		Update("is_read", true)
+	c.JSON(http.StatusOK, gin.H{"status": "read"})
+}
+
+func GetLoginEvents(c *gin.Context) {
+	var events []models.LoginEvent
+	db.DB.Preload("Server").Preload("User").Order("login_time desc").Limit(20).Find(&events)
+	c.JSON(http.StatusOK, events)
+}
+
+func ClearNotifications(c *gin.Context) {
+	userID := db.ParseUUID(currentUserID(c))
+	if err := db.DB.Where("user_id = ?", userID).Delete(&models.Notification{}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to clear notifications"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "cleared"})
+}
+
+func createNotification(userID uuid.UUID, title, message, nType string) {
+	notification := models.Notification{
+		UserID:  userID,
+		Title:   title,
+		Message: message,
+		Type:    nType,
+	}
+	db.DB.Create(&notification)
 }

@@ -5,7 +5,7 @@ import { Server, Tags, Plus, RefreshCw, Layers } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { getApiUrl } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 
 export default function ServersPage() {
   const [servers, setServers] = useState<any[]>([]);
@@ -18,9 +18,9 @@ export default function ServersPage() {
     try {
       setLoading(true);
       const [srvRes, tRes, uRes] = await Promise.all([
-        fetch(`${getApiUrl()}/servers`),
-        fetch(`${getApiUrl()}/teams`),
-        fetch(`${getApiUrl()}/users`)
+        apiFetch("/servers"),
+        apiFetch("/teams"),
+        apiFetch("/users")
       ]);
       if (srvRes.ok) setServers(await srvRes.json());
       if (tRes.ok) setTeams(await tRes.json());
@@ -35,7 +35,7 @@ export default function ServersPage() {
   const changeServerTeam = async (serverId: string, newTeamId: string) => {
     setUpdating(serverId);
     try {
-      const res = await fetch(`${getApiUrl()}/servers/${serverId}/team`, {
+      const res = await apiFetch(`/servers/${serverId}/team`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ team_id: newTeamId })

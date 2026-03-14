@@ -1,0 +1,15 @@
+services:
+  test_server:
+    build: .
+    container_name: jit_test_server
+    privileged: true
+    # The new base image handles cgroup mounting internally
+    ports:
+      - "2222:22"
+    networks:
+      - jit_network
+
+networks:
+  jit_network:
+    external: true
+    name: jit-ssh-system_default

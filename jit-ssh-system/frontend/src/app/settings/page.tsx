@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Key, Save, Check, Eye, EyeOff, Lock, ShieldCheck } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { getApiUrl } from "@/lib/api";
+import { apiFetch, getApiUrl } from "@/lib/api";
 
 export default function UserSettingsPage() {
   const [pubKey, setPubKey] = useState("");
@@ -78,7 +78,7 @@ export default function UserSettingsPage() {
       }
 
       // Now set the new password
-      const setRes = await fetch(`${getApiUrl()}/auth/set-password`, {
+      const setRes = await apiFetch("/auth/set-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_id: userId, password: newPwd }),

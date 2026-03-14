@@ -5,14 +5,16 @@ import { Server, Key, Clock, ShieldCheck, ChevronRight, RefreshCw, Eye, EyeOff }
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { getApiUrl } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
+import NotificationTray from "@/components/NotificationTray";
 
-function getCookie(name: string) {
+const getCookieInPortal = (name: string): string | null => {
   if (typeof document === "undefined") return null;
-  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
-  if (match) return match[2];
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop()?.split(";").shift() || null;
   return null;
-}
+};
 
 export default function DevPortal() {
   const [servers, setServers] = useState<any[]>([]);
@@ -23,13 +25,15 @@ export default function DevPortal() {
   const [selectedServer, setSelectedServer] = useState("");
   const [duration, setDuration] = useState("1h");
   const [sudo, setSudo] = useState(false);
+  const [requestedPath, setRequestedPath] = useState("");
+  const [requestedServices, setRequestedServices] = useState("");
   const [pubKey, setPubKey] = useState("");
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [showKey, setShowKey] = useState(false);
 
   // User Info
-  const userId = getCookie("jit_auth_id") || "11111111-1111-1111-1111-111111111111";
+  const userId = getCookieInPortal("jit_auth_id") || "11111111-1111-1111-1111-111111111111";
 
   useEffect(() => {
     const savedKey = localStorage.getItem("jit_saved_pub_key");
@@ -40,8 +44,8 @@ export default function DevPortal() {
     try {
       setLoading(true);
       const [srvRes, reqRes] = await Promise.all([
-        fetch(`${getApiUrl()}/servers`),
-        fetch(`${getApiUrl()}/requests`)
+        apiFetch("/servers"),
+        apiFetch("/requests")
       ]);
       if (srvRes.ok) setServers(await srvRes.json());
       if (reqRes.ok) {
@@ -67,15 +71,16 @@ export default function DevPortal() {
     setSubmitting(true);
     
     try {
-      const res = await fetch(`${getApiUrl()}/requests`, {
+      const res = await apiFetch("/requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           server_id: selectedServer,
-          user_id: userId,
           pub_key: pubKey,
           duration,
           sudo,
+          requested_path: requestedPath,
+          requested_services: requestedServices,
           reason
         })
       });
@@ -87,6 +92,8 @@ export default function DevPortal() {
         setSelectedServer("");
         setPubKey(localStorage.getItem("jit_saved_pub_key") || "");
         setReason("");
+        setRequestedPath("");
+        setRequestedServices("");
         fetchData();
       } else {
         const err = await res.json();
@@ -102,12 +109,10 @@ export default function DevPortal() {
 
   return (
     <>
-      <div className="flex justify-between items-center bg-card/60 p-6 rounded-xl border border-border backdrop-blur-sm">
+      <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">Access Requests</h2>
-          <p className="text-muted-foreground mt-1">
-            Request JIT SSH access to infrastructure servers.
-          </p>
+          <h2 className="text-3xl font-bold tracking-tight">Access Control</h2>
+          <p className="text-muted-foreground mt-1">Request and manage your just-in-time server access.</p>
         </div>
         <Button onClick={fetchData} variant="outline" size="icon" disabled={loading}>
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -205,6 +210,29 @@ export default function DevPortal() {
                       <ShieldCheck className="w-4 h-4 text-destructive" /> Request Root / Sudo
                     </label>
                   </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                   <label className="text-sm font-medium leading-none">Specific Path Access (Optional)</label>
+                   <input 
+                    type="text"
+                    className="flex h-10 w-full rounded-md border border-input bg-background/50 px-3 py-2 text-sm"
+                    placeholder="e.g. /var/log/nginx"
+                    value={requestedPath}
+                    onChange={(e) => setRequestedPath(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                   <label className="text-sm font-medium leading-none">Service Permissions (e.g. docker)</label>
+                   <input 
+                    type="text"
+                    className="flex h-10 w-full rounded-md border border-input bg-background/50 px-3 py-2 text-sm"
+                    placeholder="e.g. docker, www-data"
+                    value={requestedServices}
+                    onChange={(e) => setRequestedServices(e.target.value)}
+                  />
                 </div>
               </div>
 

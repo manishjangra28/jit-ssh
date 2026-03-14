@@ -1,6 +1,5 @@
 vendor
 main
-bin
 .env
 .git
 .dockerignore
